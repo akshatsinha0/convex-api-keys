@@ -63,11 +63,20 @@
     "./convex.config": {
       "types": "./dist/component/convex.config.d.ts",
       "default": "./dist/component/convex.config.js"
+    },
+    "./unkey": {
+      "types": "./dist/client/unkey.d.ts",
+      "default": "./dist/client/unkey.js"
     }
   },
   "peerDependencies": {
     "convex": "^1.31.7",
-    "react": "^18.3.1 || ^19.0.0"
+    "react": "^18.3.1 || ^19.0.0",
+    "@unkey/api": ">=1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": { "optional": true },
+    "@unkey/api": { "optional": true }
   },
   "devDependencies": {
     "@convex-dev/eslint-plugin": "^1.1.1",

@@ -8,10 +8,14 @@ the component's internal types but are designed for use at the component boundar
 where Convex IDs become strings.
 */
 
-import type { GenericDataModel, GenericMutationCtx, GenericQueryCtx } from "convex/server";
+import type { GenericActionCtx, GenericDataModel, GenericMutationCtx, GenericQueryCtx } from "convex/server";
 
 export type RunMutationCtx = GenericMutationCtx<GenericDataModel>;
 export type RunQueryCtx = GenericQueryCtx<GenericDataModel>;
+export type RunActionCtx = {
+  runMutation: GenericActionCtx<GenericDataModel>["runMutation"];
+  runQuery: GenericActionCtx<GenericDataModel>["runQuery"];
+};
 
 export type {
   VerificationResult,

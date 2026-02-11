@@ -50,11 +50,13 @@ export default defineSchema({
     roleIds: v.array(v.string()),
     rotatedFrom: v.optional(v.string()),
     rotationGraceEnd: v.optional(v.number()),
+    unkeyKeyId: v.optional(v.string()),
   })
     .index("by_hash", ["hash"])
     .index("by_owner", ["ownerId"])
     .index("by_namespace", ["namespace"])
-    .index("by_expires", ["expires"]),
+    .index("by_expires", ["expires"])
+    .index("by_unkey_id", ["unkeyKeyId"]),
 
   rateLimitBuckets: defineTable({
     keyOrOwnerId: v.string(),

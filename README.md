@@ -472,6 +472,115 @@ export default crons;
 
 ---
 
+## Unkey Integration (Optional)
+
+The component works fully standalone with zero dependencies. Optionally, you can use [Unkey](https://unkey.dev) as the key management engine while Convex provides reactive state, unlimited audit trails, and analytics rollups.
+
+### Why use Unkey mode?
+
+- **Battle-tested key infrastructure** -- Unkey handles key generation, verification, rate limiting at scale
+- **Convex reactive layer** -- real-time dashboards, subscriptions, and audit logging on top of Unkey
+- **No webhooks needed** -- Unkey has no event system; this component fills that gap with local logging
+- **Same queries** -- `listKeys`, `getUsageStats`, `getAuditLog` work identically in both modes
+
+### Installation
+
+```sh
+npm install @unkey/api
+```
+
+### Setup
+
+```ts
+import { Unkey } from "@unkey/api";
+import { UnkeyApiKeys } from "@00akshatsinha00/convex-api-keys/unkey";
+import { components } from "./_generated/api";
+
+// Construct the Unkey client in your app code (components can't access process.env)
+const unkeyClient = new Unkey({ rootKey: process.env.UNKEY_ROOT_KEY! });
+
+const apiKeys = new UnkeyApiKeys(
+  components.apiKeys,
+  { apiId: process.env.UNKEY_API_ID!, defaultNamespace: "production" },
+  unkeyClient
+);
+```
+
+### Usage
+
+Write operations (create, verify, revoke, update) must be called from **actions** since they make HTTP calls to Unkey:
+
+```ts
+import { action } from "./_generated/server";
+import { v } from "convex/values";
+
+export const createKey = action({
+  args: { name: v.string() },
+  handler: async (ctx, args) => {
+    const userId = (await ctx.auth.getUserIdentity())!.subject;
+    // 1. Calls Unkey API to generate key
+    // 2. Mirrors result into component tables via mutation
+    return await apiKeys.create(ctx, { ownerId: userId, name: args.name });
+  },
+});
+
+export const verifyKey = action({
+  args: { key: v.string() },
+  handler: async (ctx, args) => {
+    // 1. Calls Unkey API to verify
+    // 2. Logs verification result into component tables
+    return await apiKeys.verify(ctx, { key: args.key });
+  },
+});
+```
+
+Read operations work from queries (no Unkey call needed):
+
+```ts
+import { query } from "./_generated/server";
+
+export const listKeys = query({
+  handler: async (ctx) => {
+    return await apiKeys.listKeys(ctx);
+  },
+});
+```
+
+### Architecture: Unkey Mode
+
+```
+Your Convex App
+  │
+  ├── action: apiKeys.create(ctx, args)
+  │     ├── 1. Unkey SDK → keys.create() → { key, keyId }
+  │     └── 2. ctx.runMutation → component.lib.importKey()
+  │           └── ctx.db.insert("keys", { unkeyKeyId, hash, ... })
+  │
+  ├── action: apiKeys.verify(ctx, args)
+  │     ├── 1. Unkey SDK → keys.verifyKey() → { valid, code, remaining }
+  │     └── 2. ctx.runMutation → component.lib.logExternalVerification()
+  │           └── ctx.db.insert("verificationLogs", { ... })
+  │
+  └── query: apiKeys.listKeys(ctx)  ← pure Convex query, no Unkey call
+        └── ctx.runQuery → component.lib.listKeys()
+```
+
+### When to Use Which
+
+| Feature | Native Mode | Unkey Mode |
+|---------|-------------|------------|
+| Dependencies | Zero | `@unkey/api` |
+| Key generation | Convex (crypto.subtle) | Unkey API |
+| Verification | Convex mutation (atomic) | Unkey API + local log |
+| Rate limiting | Convex sliding window | Unkey + local mirror |
+| Dashboards | Reactive queries | Reactive queries (same) |
+| Audit trail | Full | Full |
+| Write context | Mutation | Action (HTTP calls) |
+| Latency | Single Convex call | Convex + Unkey round-trip |
+| Best for | Self-contained apps | Apps already using Unkey |
+
+---
+
 ## API Reference
 
 ### Key Lifecycle
@@ -615,30 +724,32 @@ if (!hasAllPermissions(result, ["billing:read", "billing:write"])) {
 ### System Overview
 
 ```
-┌─────────────────────────────────────────────────┐
-│                  Your Convex App                 │
-│  ┌───────────┐  ┌──────────┐  ┌──────────────┐  │
-│  │ Mutations  │  │ Queries  │  │ HTTP Routes  │  │
-│  └─────┬─────┘  └────┬─────┘  └──────┬───────┘  │
-│        │              │               │          │
-│        └──────────┬───┘───────────────┘          │
-│                   │  ApiKeys SDK                 │
-│                   ▼                              │
-│  ┌────────────────────────────────────────────┐  │
-│  │         convex-api-keys Component          │  │
-│  │  ┌──────┐ ┌────────┐ ┌──────┐ ┌────────┐  │  │
-│  │  │ Keys │ │ Verify │ │ RBAC │ │Analytics│  │  │
-│  │  └──┬───┘ └───┬────┘ └──┬───┘ └───┬────┘  │  │
-│  │     │         │         │         │        │  │
-│  │     └─────────┴─────────┴─────────┘        │  │
-│  │                    │                       │  │
-│  │     ┌──────────────┼──────────────┐        │  │
-│  │     ▼              ▼              ▼        │  │
-│  │  ┌──────┐   ┌────────────┐  ┌──────────┐  │  │
-│  │  │ keys │   │ vLogs/audit│  │ rateLimits│  │  │
-│  │  └──────┘   └────────────┘  └──────────┘  │  │
-│  └────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│                     Your Convex App                      │
+│  ┌───────────┐  ┌──────────┐  ┌──────────────┐          │
+│  │ Mutations  │  │ Queries  │  │   Actions    │          │
+│  └─────┬─────┘  └────┬─────┘  └──────┬───────┘          │
+│        │              │               │                  │
+│        └──────┬───────┘     ┌─────────┘                  │
+│     ApiKeys   │             │  UnkeyApiKeys (optional)   │
+│     SDK       ▼             ▼                            │
+│  ┌──────────────────────────────────────────────────┐    │
+│  │           convex-api-keys Component              │    │
+│  │  ┌──────┐ ┌────────┐ ┌──────┐ ┌────────┐        │    │
+│  │  │ Keys │ │ Verify │ │ RBAC │ │Analytics│        │    │
+│  │  └──┬───┘ └───┬────┘ └──┬───┘ └───┬────┘        │    │
+│  │     │         │         │         │              │    │
+│  │     └─────────┴─────────┴─────────┘              │    │
+│  │                    │                             │    │
+│  │     ┌──────────────┼──────────────┐              │    │
+│  │     ▼              ▼              ▼              │    │
+│  │  ┌──────┐   ┌────────────┐  ┌──────────┐        │    │
+│  │  │ keys │   │ vLogs/audit│  │ rateLimits│        │    │
+│  │  └──────┘   └────────────┘  └──────────┘        │    │
+│  └──────────────────────────────────────────────────┘    │
+│                                                          │
+│  Optional: Actions ──HTTP──▶ Unkey API (external)        │
+└──────────────────────────────────────────────────────────┘
 ```
 
 ### Key Verification Flow
@@ -716,7 +827,7 @@ If any check fails, the chain short-circuits and returns immediately with the ap
 
 | Table | Purpose | Key indexes |
 |-------|---------|------------|
-| `keys` | API key records (hashed, never plaintext) | `by_hash`, `by_owner`, `by_namespace`, `by_expires` |
+| `keys` | API key records (hashed, never plaintext) | `by_hash`, `by_owner`, `by_namespace`, `by_expires`, `by_unkey_id` |
 | `rateLimitBuckets` | Sliding window counters | `by_key_namespace` |
 | `verificationLogs` | Every verify() attempt | `by_key_time`, `by_time` |
 | `analyticsRollups` | Aggregated hourly/daily stats | `by_ns_period`, `by_key_period` |
@@ -792,7 +903,7 @@ All types are exported from the package root for TypeScript consumers:
 import type {
   VerificationResult,   // verify() return type
   CreateKeyResult,      // create() return type
-  KeyInfo,              // getKey() / listKeys() item shape
+  KeyInfo,              // getKey() / listKeys() item shape (includes unkeyKeyId?)
   UsageStats,           // getUsageStats() return type
   OverallStats,         // getOverallStats() return type
   AuditEntry,           // getAuditLog() item shape
@@ -801,7 +912,11 @@ import type {
   ApiKeysConfig,        // Constructor config type
   RunMutationCtx,       // Context type for mutation methods
   RunQueryCtx,          // Context type for query methods
+  RunActionCtx,         // Context type for action methods (Unkey mode)
 } from "@00akshatsinha00/convex-api-keys";
+
+// Unkey integration types (optional)
+import type { UnkeyApiKeys, UnkeyConfig } from "@00akshatsinha00/convex-api-keys/unkey";
 ```
 
 See more example usage in [example.ts](./example/convex/example.ts).

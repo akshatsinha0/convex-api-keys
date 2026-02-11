@@ -29,6 +29,7 @@ const keyInfoValidator = v.object({
   environment: v.optional(v.string()),
   permissions: v.array(v.string()),
   roles: v.array(v.string()),
+  unkeyKeyId: v.optional(v.string()),
 });
 
 export const listKeys = query({

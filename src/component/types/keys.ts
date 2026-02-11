@@ -104,4 +104,5 @@ export interface KeyInfo {
   environment?: string;
   permissions: string[];
   roles: string[];
+  unkeyKeyId?: string;
 }

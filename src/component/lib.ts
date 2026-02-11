@@ -11,6 +11,7 @@ RBAC assignments, queries, analytics, rate limiting, admin, and scheduled tasks.
 
 export { create, revoke } from "./functions/keys/lifecycle.js";
 export { update, rotate } from "./functions/keys/management.js";
+export { importKey, logExternalVerification } from "./functions/keys/import.js";
 export { verify } from "./functions/verify.js";
 export {
   createPermission,

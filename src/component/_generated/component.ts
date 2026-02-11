@@ -183,6 +183,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
           environment?: string;
           permissions: string[];
           roles: string[];
+          unkeyKeyId?: string;
         }>,
         Name
       >;
@@ -206,6 +207,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
           environment?: string;
           permissions: string[];
           roles: string[];
+          unkeyKeyId?: string;
         } | null,
         Name
       >;
@@ -229,6 +231,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
           environment?: string;
           permissions: string[];
           roles: string[];
+          unkeyKeyId?: string;
         }>,
         Name
       >;
@@ -378,6 +381,44 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         "mutation",
         "internal",
         Record<string, never>,
+        any,
+        Name
+      >;
+      importKey: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          unkeyKeyId: string;
+          hash: string;
+          prefix: string;
+          hint: string;
+          namespace?: string;
+          ownerId: string;
+          name?: string;
+          meta?: any;
+          expires?: number;
+          remaining?: number;
+          refill?: { amount: number; interval: string };
+          ratelimit?: { limit: number; duration: number };
+          roles?: string[];
+          permissions?: string[];
+          environment?: string;
+        },
+        string,
+        Name
+      >;
+      logExternalVerification: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          unkeyKeyId: string;
+          success: boolean;
+          code: string;
+          remaining?: number;
+          rateLimitRemaining?: number;
+          tags?: any;
+          ip?: string;
+        },
         any,
         Name
       >;

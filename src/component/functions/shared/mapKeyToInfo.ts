@@ -27,5 +27,6 @@ export function mapKeyToInfo(k: Doc<"keys">): KeyInfo {
     environment: k.environment,
     permissions: k.permissionIds,
     roles: k.roleIds,
+    unkeyKeyId: k.unkeyKeyId,
   };
 }
