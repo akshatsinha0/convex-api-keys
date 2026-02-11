@@ -49,5 +49,5 @@ export declare const internal: FilterApi<
 >;
 
 export declare const components: {
-  convexApiKeys: import("@00akshatsinha00/convex-api-keys/_generated/component.js").ComponentApi<"convexApiKeys">;
+  apiKeys: import("@00akshatsinha00/convex-api-keys/_generated/component.js").ComponentApi<"apiKeys">;
 };
