@@ -1,146 +1,296 @@
-# Convex Component Template
+# Convex API Keys
 
-This is a Convex component, ready to be published on npm.
+[![npm version](https://badge.fury.io/js/@00akshatsinha00%2Fconvex-api-keys.svg)](https://badge.fury.io/js/@00akshatsinha00%2Fconvex-api-keys)
 
-To create your own component:
+A native, zero-dependency Convex component for API key management. Handles key generation, SHA-256 hashing, verification, rate limiting, RBAC, usage credits, and audit logging -- all within Convex's transactional guarantees.
 
-1. Write code in src/component for your component. Component-specific tables,
-   queries, mutations, and actions go here.
-1. Write code in src/client for the Class that interfaces with the component.
-   This is the bridge your users will access to get information into and out of
-   your component
-1. Write example usage in example/convex/example.ts.
-1. Delete the text in this readme until `---` and flesh out the README.
-1. Publish to npm with `npm run alpha` or `npm run release`.
+Found a bug? Feature request? [File it here](https://github.com/akshatsinha0/convex-api-keys/issues).
 
-To develop your component run a dev process in the example project:
+## Features
 
-```sh
-npm i
-npm run dev
-```
-
-`npm i` will do the install and an initial build. `npm run dev` will start a
-file watcher to re-build the component, as well as the example project frontend
-and backend, which does codegen and installs the component.
-
-Modify the schema and index files in src/component/ to define your component.
-
-Write a client for using this component in src/client/index.ts.
-
-If you won't be adding frontend code (e.g. React components) to this component
-you can delete "./react" references in package.json and "src/react/" directory.
-If you will be adding frontend code, add a peer dependency on React in
-package.json.
-
-### Component Directory structure
-
-```
-.
-├── README.md           documentation of your component
-├── package.json        component name, version number, other metadata
-├── package-lock.json   Components are like libraries, package-lock.json
-│                       is .gitignored and ignored by consumers.
-├── src
-│   ├── component/
-│   │   ├── _generated/ Files here are generated for the component.
-│   │   ├── convex.config.ts  Name your component here and use other components
-│   │   ├── lib.ts    Define functions here and in new files in this directory
-│   │   └── schema.ts   schema specific to this component
-│   ├── client/
-│   │   └── index.ts    Code that needs to run in the app that uses the
-│   │                   component. Generally the app interacts directly with
-│   │                   the component's exposed API (src/component/*).
-│   └── react/          Code intended to be used on the frontend goes here.
-│       │               Your are free to delete this if this component
-│       │               does not provide code.
-│       └── index.ts
-├── example/            example Convex app that uses this component
-│   └── convex/
-│       ├── _generated/       Files here are generated for the example app.
-│       ├── convex.config.ts  Imports and uses this component
-│       ├── myFunctions.ts    Functions that use the component
-│       └── schema.ts         Example app schema
-└── dist/               Publishing artifacts will be created here.
-```
-
----
-
-# Convex Convex Api Keys
-
-[![npm version](https://badge.fury.io/js/@example%2Fconvex-api-keys.svg)](https://badge.fury.io/js/@example%2Fconvex-api-keys)
-
-<!-- START: Include on https://convex.dev/components -->
-
-- [ ] What is some compelling syntax as a hook?
-- [ ] Why should you use this component?
-- [ ] Links to docs / other resources?
-
-Found a bug? Feature request?
-[File it here](https://github.com/akshatsinha0/convex-api-keys/issues).
+- Cryptographically secure key generation (256-bit entropy, base62 encoded)
+- SHA-256 hashed storage (plaintext keys never persist)
+- Sliding window rate limiting with per-key overrides
+- Usage credits with automatic refill (hourly/daily/weekly/monthly)
+- Role-based access control (RBAC) with permissions and roles
+- Key rotation with configurable grace periods
+- Comprehensive audit logging
+- Real-time reactive queries for dashboards
+- Analytics rollups for usage reporting
 
 ## Installation
 
-Create a `convex.config.ts` file in your app's `convex/` folder and install the
-component by calling `use`:
+```sh
+npm install @00akshatsinha00/convex-api-keys
+```
+
+Register the component in your `convex/convex.config.ts`:
 
 ```ts
-// convex/convex.config.ts
 import { defineApp } from "convex/server";
-import convexApiKeys from "@00akshatsinha00/convex-api-keys/convex.config.js";
+import apiKeys from "@00akshatsinha00/convex-api-keys/convex.config";
 
 const app = defineApp();
-app.use(convexApiKeys);
-
+app.use(apiKeys, { name: "apiKeys" });
 export default app;
 ```
 
-## Usage
+## Quick Start
+
+### Direct component access
 
 ```ts
+import { mutation, query } from "./_generated/server";
 import { components } from "./_generated/api";
+import { v } from "convex/values";
 
-export const addComment = mutation({
-  args: { text: v.string(), targetId: v.string() },
+export const createKey = mutation({
+  args: { name: v.string() },
   handler: async (ctx, args) => {
-    return await ctx.runMutation(components.convexApiKeys.lib.add, {
-      text: args.text,
-      targetId: args.targetId,
-      userId: await getAuthUserId(ctx),
+    const userId = (await ctx.auth.getUserIdentity())!.subject;
+    return await ctx.runMutation(components.apiKeys.lib.create, {
+      ownerId: userId,
+      name: args.name,
+      namespace: "default",
+    });
+  },
+});
+
+export const verifyKey = mutation({
+  args: { key: v.string() },
+  handler: async (ctx, args) => {
+    return await ctx.runMutation(components.apiKeys.lib.verify, {
+      key: args.key,
     });
   },
 });
 ```
 
-See more example usage in [example.ts](./example/convex/example.ts).
-
-### HTTP Routes
-
-You can register HTTP routes for the component to expose HTTP endpoints:
+### Client SDK (class-based)
 
 ```ts
-import { httpRouter } from "convex/server";
-import { registerRoutes } from "@00akshatsinha00/convex-api-keys";
+import { ApiKeys, hasPermission } from "@00akshatsinha00/convex-api-keys";
 import { components } from "./_generated/api";
 
-const http = httpRouter();
-
-registerRoutes(http, components.convexApiKeys, {
-  pathPrefix: "/comments",
+const apiKeys = new ApiKeys(components.apiKeys, {
+  defaultNamespace: "production",
+  defaultPrefix: "sk_live_",
 });
 
-export default http;
+export const createKey = mutation({
+  args: { name: v.string() },
+  handler: async (ctx, args) => {
+    const userId = (await ctx.auth.getUserIdentity())!.subject;
+    return await apiKeys.create(ctx, { ownerId: userId, name: args.name });
+  },
+});
+
+export const verifyKey = mutation({
+  args: { key: v.string() },
+  handler: async (ctx, args) => {
+    const result = await apiKeys.verify(ctx, { key: args.key });
+    if (result.valid && hasPermission(result, "write:data")) {
+      // authorized
+    }
+    return result;
+  },
+});
 ```
 
-This will expose a GET endpoint that returns the most recent comment as JSON.
-The endpoint requires a `targetId` query parameter. See
-[http.ts](./example/convex/http.ts) for a complete example.
+## API Reference
 
-<!-- END: Include on https://convex.dev/components -->
+### Key Lifecycle
 
-Run the example:
+| Method | Type | Description |
+|--------|------|-------------|
+| `create` | mutation | Generate a new API key |
+| `verify` | mutation | Verify a key (checks expiration, rate limits, credits, RBAC) |
+| `revoke` | mutation | Revoke a key (soft or hard delete) |
+| `update` | mutation | Update key properties |
+| `rotate` | mutation | Rotate a key with optional grace period |
+
+### Queries
+
+| Method | Type | Description |
+|--------|------|-------------|
+| `listKeys` | query | List keys by namespace or owner |
+| `getKey` | query | Get a single key's details |
+| `getKeysByOwner` | query | Get all keys for an owner |
+
+### RBAC
+
+| Method | Type | Description |
+|--------|------|-------------|
+| `createPermission` | mutation | Create a named permission |
+| `createRole` | mutation | Create a role with permissions |
+| `assignRoles` | mutation | Assign roles to a key |
+| `assignPermissions` | mutation | Assign permissions to a key |
+| `listPermissions` | query | List all permissions |
+| `listRoles` | query | List all roles |
+
+### Analytics
+
+| Method | Type | Description |
+|--------|------|-------------|
+| `getUsageStats` | query | Per-key verification statistics |
+| `getUsageByOwner` | query | Aggregated stats across an owner's keys |
+| `getOverallStats` | query | Namespace-level overview metrics |
+| `getAuditLog` | query | Audit trail with filtering |
+| `getVerificationLog` | query | Verification history with time filtering |
+
+### Rate Limiting
+
+| Method | Type | Description |
+|--------|------|-------------|
+| `checkRateLimit` | mutation | Manual rate limit check |
+| `setRateLimitOverride` | mutation | Override rate limit for a key |
+| `deleteRateLimitOverride` | mutation | Remove rate limit override |
+| `getRateLimitOverrides` | query | List overrides for a namespace |
+
+### Admin
+
+| Method | Type | Description |
+|--------|------|-------------|
+| `purgeExpiredKeys` | mutation | Delete expired keys |
+| `purgeVerificationLogs` | mutation | Clean up old verification logs |
+
+## Helper Functions
+
+```ts
+import {
+  hasPermission,
+  hasAnyPermission,
+  hasAllPermissions,
+  hasRole,
+  isRateLimited,
+  isExpired,
+  isRevoked,
+  calculateExpiration,
+  isKeyExpiringSoon,
+} from "@00akshatsinha00/convex-api-keys";
+```
+
+## Architecture
+
+### System Overview
+
+```
+┌─────────────────────────────────────────────────┐
+│                  Your Convex App                 │
+│  ┌───────────┐  ┌──────────┐  ┌──────────────┐  │
+│  │ Mutations  │  │ Queries  │  │ HTTP Routes  │  │
+│  └─────┬─────┘  └────┬─────┘  └──────┬───────┘  │
+│        │              │               │          │
+│        └──────────┬───┘───────────────┘          │
+│                   │  ApiKeys SDK                 │
+│                   ▼                              │
+│  ┌────────────────────────────────────────────┐  │
+│  │         convex-api-keys Component          │  │
+│  │  ┌──────┐ ┌────────┐ ┌──────┐ ┌────────┐  │  │
+│  │  │ Keys │ │ Verify │ │ RBAC │ │Analytics│  │  │
+│  │  └──┬───┘ └───┬────┘ └──┬───┘ └───┬────┘  │  │
+│  │     │         │         │         │        │  │
+│  │     └─────────┴─────────┴─────────┘        │  │
+│  │                    │                       │  │
+│  │     ┌──────────────┼──────────────┐        │  │
+│  │     ▼              ▼              ▼        │  │
+│  │  ┌──────┐   ┌────────────┐  ┌──────────┐  │  │
+│  │  │ keys │   │ vLogs/audit│  │ rateLimits│  │  │
+│  │  └──────┘   └────────────┘  └──────────┘  │  │
+│  └────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────┘
+```
+
+### Key Verification Flow
+
+```
+Client Request
+      │
+      ▼
+┌─────────────┐    ┌──────────────┐
+│ verify(key) │───▶│ SHA-256 Hash │
+└─────────────┘    └──────┬───────┘
+                          ▼
+                   ┌──────────────┐
+                   │  Lookup Key  │
+                   │  (by hash)   │
+                   └──────┬───────┘
+                          ▼
+              ┌───────────────────────┐
+              │   Validation Chain    │
+              │  revoked → disabled   │
+              │  → expired → grace    │
+              │  → refill → credits   │
+              │  → rate limit         │
+              └───────────┬───────────┘
+                          ▼
+              ┌───────────────────────┐
+              │  Resolve Permissions  │
+              │  (roles → perms)      │
+              └───────────┬───────────┘
+                          ▼
+              ┌───────────────────────┐
+              │  Log Verification     │
+              │  Return Result        │
+              └───────────────────────┘
+```
+
+### Data Model
+
+```
+┌──────────┐     ┌────────────┐     ┌─────────────────┐
+│   keys   │────▶│   roles    │────▶│   permissions   │
+│          │     │ (roleIds)  │     │ (permissionIds) │
+│ hash     │     └────────────┘     └─────────────────┘
+│ ownerId  │
+│ namespace│     ┌──────────────────┐
+│ ratelimit│────▶│rateLimitOverrides│
+│ refill   │     │ (per-key limits) │
+│ remaining│     └──────────────────┘
+└────┬─────┘
+     │           ┌──────────────────┐
+     └──────────▶│ verificationLogs │
+                 │ (append-only)    │
+                 └────────┬─────────┘
+                          │
+                          ▼
+                 ┌──────────────────┐
+                 │analyticsRollups  │
+                 │ (hourly buckets) │
+                 └──────────────────┘
+
+┌──────────┐
+│ auditLog │  (all mutations logged)
+└──────────┘
+```
+
+### RBAC Model
+
+```
+┌─────────┐   assignRoles   ┌───────────┐   permissions[]   ┌──────────────┐
+│   Key   │─────────────────▶│   Role    │──────────────────▶│  Permission  │
+│         │                  │ "admin"   │                   │ "keys:write" │
+│         │  assignPerms     │ "viewer"  │                   │ "keys:read"  │
+│         │─────────────────▶└───────────┘                   └──────────────┘
+│         │  (direct perms)          ▲
+└─────────┘                          │
+                              createRole(name,
+                                permissions[])
+
+verify() → resolvePermissions():
+  directPerms ∪ (roles → flatMap(role.permissions))
+```
+
+See more example usage in [example.ts](./example/convex/example.ts).
+
+## Development
 
 ```sh
 npm i
 npm run dev
+npm test
 ```
+
+## License
+
+Apache-2.0

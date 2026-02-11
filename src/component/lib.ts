@@ -5,30 +5,34 @@
 
 This module serves as the main entry point for the component, re-exporting all
 functions from their respective modularized files. Functions are organized into
-logical groups: key lifecycle (keys.ts), verification (verify.ts), RBAC (rbac.ts),
-queries (queries.ts), analytics (analytics.ts), rate limiting (ratelimit.ts),
-admin operations (admin.ts), and scheduled tasks (scheduled.ts).
+logical groups: key lifecycle, key management, verification, RBAC entities,
+RBAC assignments, queries, analytics, rate limiting, admin, and scheduled tasks.
 */
 
-export { create, revoke, update, rotate } from "./functions/keys.js";
+export { create, revoke } from "./functions/keys/lifecycle.js";
+export { update, rotate } from "./functions/keys/management.js";
 export { verify } from "./functions/verify.js";
 export {
   createPermission,
   listPermissions,
   deletePermission,
+} from "./functions/rbac/permissions.js";
+export {
   createRole,
   listRoles,
   deleteRole,
-  assignRoles,
-  assignPermissions,
-} from "./functions/rbac.js";
+} from "./functions/rbac/roles.js";
+export { assignRoles, assignPermissions } from "./functions/rbac/assignments.js";
 export { listKeys, getKey, getKeysByOwner } from "./functions/queries.js";
 export {
   getUsageStats,
-  getOverallStats,
+  getUsageByOwner,
+} from "./functions/analytics/usage.js";
+export { getOverallStats } from "./functions/analytics/overview.js";
+export {
   getAuditLog,
   getVerificationLog,
-} from "./functions/analytics.js";
+} from "./functions/analytics/logs.js";
 export {
   checkRateLimit,
   setRateLimitOverride,
@@ -36,4 +40,5 @@ export {
   getRateLimitOverrides,
 } from "./functions/ratelimit.js";
 export { purgeExpiredKeys, purgeVerificationLogs } from "./functions/admin.js";
-export { expireKeys, rollupAnalytics, cleanupLogs } from "./functions/scheduled.js";
+export { expireKeys, cleanupLogs } from "./functions/scheduled/maintenance.js";
+export { rollupAnalytics } from "./functions/scheduled/rollup.js";

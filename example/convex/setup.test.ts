@@ -9,7 +9,7 @@ const modules = import.meta.glob("./**/*.*s");
 // explicitly register it with its schema and modules.
 export function initConvexTest() {
   const t = convexTest(schema, modules);
-  component.register(t);
+  component.register(t, "apiKeys");
   return t;
 }
 

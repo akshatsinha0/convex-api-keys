@@ -1,112 +1,260 @@
 /*
-(1.) Client SDK utilities and helper functions for API key management.
-(2.) Provides type-safe wrappers and utility functions for component usage.
-(3.) Designed to work with any Convex component instance without requiring generated types.
+(1.) Client SDK for the API keys component providing a class-based interface.
+(2.) ApiKeys class wraps component function references with typed method signatures.
+(3.) Re-exports helper functions and types for consumer convenience.
 
-This module provides utility functions and helpers for working with the API keys
-component. The hasPermission helper checks if a verification result contains a
-specific permission. Additional utilities can be added here for common operations
-like formatting key hints, calculating expiration times, etc.
+This module provides the primary client interface for consuming applications.
+The ApiKeys class accepts a component reference and optional configuration,
+then provides typed methods for all key management operations. Each method
+delegates to the component's internal functions via ctx.runMutation or
+ctx.runQuery, merging in default configuration values.
 */
 
-export interface VerificationResult {
-  valid: boolean;
-  code: string;
-  keyId?: string;
-  ownerId?: string;
-  meta?: any;
-  remaining?: number;
-  ratelimit?: {
-    remaining: number;
-    reset: number;
-  };
-  permissions: string[];
-  roles: string[];
-  message?: string;
+import type { ComponentApi } from "../component/_generated/component.js";
+import type { RunMutationCtx, RunQueryCtx, ApiKeysConfig } from "./types.js";
+
+export class ApiKeys {
+  public component: ComponentApi;
+  private config: ApiKeysConfig;
+
+  constructor(
+    component: ComponentApi,
+    config?: ApiKeysConfig
+  ) {
+    this.component = component;
+    this.config = config || {};
+  }
+
+  async create(
+    ctx: RunMutationCtx,
+    args: {
+      ownerId: string;
+      name?: string;
+      meta?: Record<string, unknown>;
+      prefix?: string;
+      expires?: number;
+      remaining?: number;
+      refill?: { amount: number; interval: string };
+      ratelimit?: { limit: number; duration: number };
+      roles?: string[];
+      permissions?: string[];
+      environment?: string;
+      namespace?: string;
+    }
+  ) {
+    return await ctx.runMutation(this.component.lib.create, {
+      ...args,
+      prefix: args.prefix || this.config.defaultPrefix,
+      namespace: args.namespace || this.config.defaultNamespace,
+    });
+  }
+
+  async verify(
+    ctx: RunMutationCtx,
+    args: {
+      key: string;
+      tags?: Record<string, unknown>;
+      ip?: string;
+      namespace?: string;
+    }
+  ) {
+    return await ctx.runMutation(this.component.lib.verify, {
+      ...args,
+      namespace: args.namespace || this.config.defaultNamespace,
+    });
+  }
+
+  async revoke(
+    ctx: RunMutationCtx,
+    args: { keyId: string; soft?: boolean }
+  ) {
+    return await ctx.runMutation(this.component.lib.revoke, args);
+  }
+
+  async update(
+    ctx: RunMutationCtx,
+    args: {
+      keyId: string;
+      name?: string;
+      meta?: Record<string, unknown>;
+      expires?: number | null;
+      remaining?: number;
+      ratelimit?: { limit: number; duration: number };
+      enabled?: boolean;
+    }
+  ) {
+    return await ctx.runMutation(this.component.lib.update, args);
+  }
+
+  async rotate(
+    ctx: RunMutationCtx,
+    args: { keyId: string; gracePeriodMs?: number }
+  ) {
+    return await ctx.runMutation(this.component.lib.rotate, args);
+  }
+
+  async listKeys(
+    ctx: RunQueryCtx,
+    args?: { namespace?: string; ownerId?: string; limit?: number }
+  ) {
+    return await ctx.runQuery(this.component.lib.listKeys, {
+      namespace: args?.namespace || this.config.defaultNamespace,
+      ownerId: args?.ownerId,
+      limit: args?.limit,
+    });
+  }
+
+  async getKey(ctx: RunQueryCtx, args: { keyId: string }) {
+    return await ctx.runQuery(this.component.lib.getKey, args);
+  }
+
+  async getKeysByOwner(ctx: RunQueryCtx, args: { ownerId: string }) {
+    return await ctx.runQuery(this.component.lib.getKeysByOwner, args);
+  }
+
+  async getUsageStats(
+    ctx: RunQueryCtx,
+    args: { keyId: string; period?: string }
+  ) {
+    return await ctx.runQuery(this.component.lib.getUsageStats, args);
+  }
+
+  async getUsageByOwner(
+    ctx: RunQueryCtx,
+    args: { ownerId: string; period?: string }
+  ) {
+    return await ctx.runQuery(this.component.lib.getUsageByOwner, args);
+  }
+
+  async getOverallStats(ctx: RunQueryCtx, args: { namespace: string }) {
+    return await ctx.runQuery(this.component.lib.getOverallStats, args);
+  }
+
+  async getAuditLog(
+    ctx: RunQueryCtx,
+    args?: { keyId?: string; actorId?: string; limit?: number }
+  ) {
+    return await ctx.runQuery(this.component.lib.getAuditLog, args || {});
+  }
+
+  async getVerificationLog(
+    ctx: RunQueryCtx,
+    args: { keyId: string; limit?: number; since?: number }
+  ) {
+    return await ctx.runQuery(this.component.lib.getVerificationLog, args);
+  }
+
+  async createPermission(
+    ctx: RunMutationCtx,
+    args: { name: string; description?: string }
+  ) {
+    return await ctx.runMutation(this.component.lib.createPermission, args);
+  }
+
+  async listPermissions(ctx: RunQueryCtx) {
+    return await ctx.runQuery(this.component.lib.listPermissions, {});
+  }
+
+  async deletePermission(ctx: RunMutationCtx, args: { permissionId: string }) {
+    return await ctx.runMutation(this.component.lib.deletePermission, args);
+  }
+
+  async createRole(
+    ctx: RunMutationCtx,
+    args: { name: string; description?: string; permissions: string[] }
+  ) {
+    return await ctx.runMutation(this.component.lib.createRole, args);
+  }
+
+  async listRoles(ctx: RunQueryCtx) {
+    return await ctx.runQuery(this.component.lib.listRoles, {});
+  }
+
+  async deleteRole(ctx: RunMutationCtx, args: { roleId: string }) {
+    return await ctx.runMutation(this.component.lib.deleteRole, args);
+  }
+
+  async assignRoles(
+    ctx: RunMutationCtx,
+    args: { keyId: string; roles: string[] }
+  ) {
+    return await ctx.runMutation(this.component.lib.assignRoles, args);
+  }
+
+  async assignPermissions(
+    ctx: RunMutationCtx,
+    args: { keyId: string; permissions: string[] }
+  ) {
+    return await ctx.runMutation(this.component.lib.assignPermissions, args);
+  }
+
+  async checkRateLimit(
+    ctx: RunMutationCtx,
+    args: { identifier: string; namespace: string; limit: number; duration: number }
+  ) {
+    return await ctx.runMutation(this.component.lib.checkRateLimit, args);
+  }
+
+  async setRateLimitOverride(
+    ctx: RunMutationCtx,
+    args: { keyId: string; limit: number; duration: number }
+  ) {
+    return await ctx.runMutation(this.component.lib.setRateLimitOverride, args);
+  }
+
+  async deleteRateLimitOverride(
+    ctx: RunMutationCtx,
+    args: { keyId: string }
+  ) {
+    return await ctx.runMutation(this.component.lib.deleteRateLimitOverride, args);
+  }
+
+  async getRateLimitOverrides(
+    ctx: RunQueryCtx,
+    args: { namespace: string }
+  ) {
+    return await ctx.runQuery(this.component.lib.getRateLimitOverrides, args);
+  }
+
+  async purgeExpiredKeys(
+    ctx: RunMutationCtx,
+    args: { namespace: string; olderThan?: number }
+  ) {
+    return await ctx.runMutation(this.component.lib.purgeExpiredKeys, args);
+  }
+
+  async purgeVerificationLogs(
+    ctx: RunMutationCtx,
+    args: { olderThan: number }
+  ) {
+    return await ctx.runMutation(this.component.lib.purgeVerificationLogs, args);
+  }
 }
 
-export interface CreateKeyResult {
-  key: string;
-  keyId: string;
-}
+// Re-export helpers and types
+export {
+  hasPermission,
+  hasAnyPermission,
+  hasAllPermissions,
+  hasRole,
+  isRateLimited,
+  isExpired,
+  isRevoked,
+  formatKeyHint,
+  calculateExpiration,
+  isKeyExpiringSoon,
+} from "./helpers.js";
 
-export interface UsageStats {
-  total: number;
-  valid: number;
-  rateLimited: number;
-  usageExceeded: number;
-  expired: number;
-  revoked: number;
-  disabled: number;
-  notFound: number;
-}
-
-export interface OverallStats {
-  totalKeys: number;
-  activeKeys: number;
-  disabledKeys: number;
-  expiredKeys: number;
-  revokedKeys: number;
-  totalVerifications: number;
-  successRate: number;
-}
-
-export function hasPermission(
-  verifyResult: VerificationResult,
-  permission: string
-): boolean {
-  return verifyResult.permissions?.includes(permission) || false;
-}
-
-export function hasAnyPermission(
-  verifyResult: VerificationResult,
-  permissions: string[]
-): boolean {
-  return permissions.some(p => verifyResult.permissions?.includes(p));
-}
-
-export function hasAllPermissions(
-  verifyResult: VerificationResult,
-  permissions: string[]
-): boolean {
-  return permissions.every(p => verifyResult.permissions?.includes(p));
-}
-
-export function hasRole(
-  verifyResult: VerificationResult,
-  role: string
-): boolean {
-  return verifyResult.roles?.includes(role) || false;
-}
-
-export function isRateLimited(verifyResult: VerificationResult): boolean {
-  return verifyResult.code === "RATE_LIMITED";
-}
-
-export function isExpired(verifyResult: VerificationResult): boolean {
-  return verifyResult.code === "EXPIRED";
-}
-
-export function isRevoked(verifyResult: VerificationResult): boolean {
-  return verifyResult.code === "REVOKED";
-}
-
-export function formatKeyHint(key: string): string {
-  if (key.length < 12) return key;
-  const prefix = key.substring(0, key.indexOf("_") + 1);
-  const suffix = key.substring(key.length - 4);
-  return `${prefix}...${suffix}`;
-}
-
-export function calculateExpiration(days: number): number {
-  return Date.now() + days * 24 * 60 * 60 * 1000;
-}
-
-export function isKeyExpiringSoon(
-  expiresAt: number | undefined,
-  daysThreshold: number = 7
-): boolean {
-  if (!expiresAt) return false;
-  const threshold = Date.now() + daysThreshold * 24 * 60 * 60 * 1000;
-  return expiresAt < threshold;
-}
+export type {
+  VerificationResult,
+  CreateKeyResult,
+  UsageStats,
+  OverallStats,
+  AuditEntry,
+  VerificationEntry,
+  KeyInfo,
+  ApiKeysConfig,
+  OutcomeCode,
+  RunMutationCtx,
+  RunQueryCtx,
+} from "./types.js";

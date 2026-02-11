@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation } from "../_generated/server.js";
+import { logAudit } from "./shared/auditLogger.js";
 
 /*
 (1.) Administrative cleanup functions for purging expired keys and old logs.
@@ -19,26 +20,25 @@ export const purgeExpiredKeys = mutation({
   },
   returns: v.number(),
   handler: async (ctx, args) => {
-    const now = Date.now();
-    const cutoff = args.olderThan || now;
+    const cutoff = args.olderThan || Date.now();
 
     const expiredKeys = await ctx.db
       .query("keys")
       .withIndex("by_namespace", (q) => q.eq("namespace", args.namespace))
-      .filter((q) => q.and(
-        q.neq(q.field("expires"), undefined),
-        q.lt(q.field("expires"), cutoff)
-      ))
+      .filter((q) =>
+        q.and(
+          q.neq(q.field("expires"), undefined),
+          q.lt(q.field("expires"), cutoff)
+        )
+      )
       .collect();
 
     for (const key of expiredKeys) {
       await ctx.db.delete(key._id);
     }
 
-    await ctx.db.insert("auditLog", {
-      action: "admin.purge_expired_keys",
-      timestamp: now,
-      details: { namespace: args.namespace, count: expiredKeys.length },
+    await logAudit(ctx, "admin.purge_expired_keys", {
+      namespace: args.namespace, count: expiredKeys.length,
     });
 
     return expiredKeys.length;
@@ -46,13 +46,9 @@ export const purgeExpiredKeys = mutation({
 });
 
 export const purgeVerificationLogs = mutation({
-  args: {
-    olderThan: v.number(),
-  },
+  args: { olderThan: v.number() },
   returns: v.number(),
   handler: async (ctx, args) => {
-    const now = Date.now();
-
     const oldLogs = await ctx.db
       .query("verificationLogs")
       .withIndex("by_time", (q) => q.lt("timestamp", args.olderThan))
@@ -62,10 +58,8 @@ export const purgeVerificationLogs = mutation({
       await ctx.db.delete(log._id);
     }
 
-    await ctx.db.insert("auditLog", {
-      action: "admin.purge_verification_logs",
-      timestamp: now,
-      details: { olderThan: args.olderThan, count: oldLogs.length },
+    await logAudit(ctx, "admin.purge_verification_logs", {
+      olderThan: args.olderThan, count: oldLogs.length,
     });
 
     return oldLogs.length;

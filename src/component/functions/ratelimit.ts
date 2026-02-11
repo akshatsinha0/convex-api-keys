@@ -1,5 +1,9 @@
 import { v } from "convex/values";
 import { mutation, query } from "../_generated/server.js";
+import type { Id } from "../_generated/dataModel.js";
+import { checkAndUpdateRateLimit } from "./shared/ratelimitCore.js";
+import { logAudit } from "./shared/auditLogger.js";
+import { assertKeyExists, assertPositive } from "./shared/validation.js";
 
 /*
 (1.) Rate limit management functions for checking limits and managing overrides.
@@ -11,72 +15,6 @@ configure custom rate limits on a per-key basis, overriding the default limits
 set during key creation. The checkRateLimit function allows manual verification
 of rate limit status without consuming a request quota.
 */
-
-async function checkAndUpdateRateLimit(
-  ctx: any,
-  identifier: string,
-  namespace: string,
-  limit: number,
-  duration: number,
-  now: number
-): Promise<{ success: boolean; remaining: number; reset: number }> {
-  const bucket = await ctx.db
-    .query("rateLimitBuckets")
-    .withIndex("by_key_namespace", (q: any) =>
-      q.eq("keyOrOwnerId", identifier).eq("namespace", namespace)
-    )
-    .first();
-
-  const windowStart = now - duration;
-
-  if (!bucket) {
-    await ctx.db.insert("rateLimitBuckets", {
-      keyOrOwnerId: identifier,
-      namespace,
-      windowStart: now,
-      count: 1,
-      limit,
-      duration,
-    });
-
-    return {
-      success: true,
-      remaining: limit - 1,
-      reset: now + duration,
-    };
-  }
-
-  if (bucket.windowStart < windowStart) {
-    await ctx.db.patch(bucket._id, {
-      windowStart: now,
-      count: 1,
-    });
-
-    return {
-      success: true,
-      remaining: limit - 1,
-      reset: now + duration,
-    };
-  }
-
-  if (bucket.count >= limit) {
-    return {
-      success: false,
-      remaining: 0,
-      reset: bucket.windowStart + duration,
-    };
-  }
-
-  await ctx.db.patch(bucket._id, {
-    count: bucket.count + 1,
-  });
-
-  return {
-    success: true,
-    remaining: limit - bucket.count - 1,
-    reset: bucket.windowStart + duration,
-  };
-}
 
 export const checkRateLimit = mutation({
   args: {
@@ -91,6 +29,9 @@ export const checkRateLimit = mutation({
     reset: v.number(),
   }),
   handler: async (ctx, args) => {
+    assertPositive(args.limit, "limit");
+    assertPositive(args.duration, "duration");
+
     return await checkAndUpdateRateLimit(
       ctx,
       args.identifier,
@@ -109,14 +50,10 @@ export const setRateLimitOverride = mutation({
     duration: v.number(),
   },
   handler: async (ctx, args) => {
-    const now = Date.now();
-    const keyDoc = await ctx.db.get(args.keyId as any);
+    assertPositive(args.limit, "limit");
+    assertPositive(args.duration, "duration");
 
-    if (!keyDoc || (keyDoc as any)._tableName !== "keys") {
-      throw new Error("Key not found");
-    }
-
-    const key = keyDoc as any;
+    const key = await assertKeyExists(ctx, args.keyId);
 
     const existing = await ctx.db
       .query("rateLimitOverrides")
@@ -139,28 +76,19 @@ export const setRateLimitOverride = mutation({
       });
     }
 
-    await ctx.db.insert("auditLog", {
-      action: "ratelimit.override_set",
-      targetKeyHash: key.hash,
-      timestamp: now,
-      details: { limit: args.limit, duration: args.duration },
-    });
+    await logAudit(
+      ctx,
+      "ratelimit.override_set",
+      { limit: args.limit, duration: args.duration },
+      key.hash
+    );
   },
 });
 
 export const deleteRateLimitOverride = mutation({
-  args: {
-    keyId: v.string(),
-  },
+  args: { keyId: v.string() },
   handler: async (ctx, args) => {
-    const now = Date.now();
-    const keyDoc = await ctx.db.get(args.keyId as any);
-
-    if (!keyDoc || (keyDoc as any)._tableName !== "keys") {
-      throw new Error("Key not found");
-    }
-
-    const key = keyDoc as any;
+    const key = await assertKeyExists(ctx, args.keyId);
 
     const override = await ctx.db
       .query("rateLimitOverrides")
@@ -171,33 +99,28 @@ export const deleteRateLimitOverride = mutation({
 
     if (override) {
       await ctx.db.delete(override._id);
-
-      await ctx.db.insert("auditLog", {
-        action: "ratelimit.override_deleted",
-        targetKeyHash: key.hash,
-        timestamp: now,
-      });
+      await logAudit(ctx, "ratelimit.override_deleted", undefined, key.hash);
     }
   },
 });
 
 export const getRateLimitOverrides = query({
-  args: {
-    namespace: v.string(),
-  },
-  returns: v.array(v.object({
-    keyOrOwnerId: v.string(),
-    namespace: v.string(),
-    limit: v.number(),
-    duration: v.number(),
-  })),
+  args: { namespace: v.string() },
+  returns: v.array(
+    v.object({
+      keyOrOwnerId: v.string(),
+      namespace: v.string(),
+      limit: v.number(),
+      duration: v.number(),
+    })
+  ),
   handler: async (ctx, args) => {
     const overrides = await ctx.db
       .query("rateLimitOverrides")
       .filter((q) => q.eq(q.field("namespace"), args.namespace))
       .collect();
 
-    return overrides.map(o => ({
+    return overrides.map((o) => ({
       keyOrOwnerId: o.keyOrOwnerId,
       namespace: o.namespace,
       limit: o.limit,
