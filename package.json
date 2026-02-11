@@ -14,7 +14,7 @@
   ],
   "type": "module",
   "scripts": {
-    "dev": "run-p -r 'dev:*'",
+    "dev": "run-p -r dev:backend dev:frontend dev:build",
     "dev:backend": "convex dev --typecheck-components",
     "dev:frontend": "cd example && vite --clearScreen false",
     "dev:build": "chokidar 'tsconfig*.json' 'src/**/*.ts' -i '**/*.test.ts' -c 'npm run build:codegen' --initial",
