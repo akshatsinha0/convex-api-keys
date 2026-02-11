@@ -1,155 +1,112 @@
-import {
-  actionGeneric,
-  httpActionGeneric,
-  mutationGeneric,
-  queryGeneric,
-} from "convex/server";
-import type {
-  Auth,
-  GenericActionCtx,
-  GenericDataModel,
-  HttpRouter,
-} from "convex/server";
-import { v } from "convex/values";
-import type { ComponentApi } from "../component/_generated/component.js";
+/*
+(1.) Client SDK utilities and helper functions for API key management.
+(2.) Provides type-safe wrappers and utility functions for component usage.
+(3.) Designed to work with any Convex component instance without requiring generated types.
 
-// See the example/convex/example.ts file for how to use this component.
+This module provides utility functions and helpers for working with the API keys
+component. The hasPermission helper checks if a verification result contains a
+specific permission. Additional utilities can be added here for common operations
+like formatting key hints, calculating expiration times, etc.
+*/
 
-/**
- *
- * @param ctx
- * @param targetId
- */
-export function translate(
-  ctx: ActionCtx,
-  component: ComponentApi,
-  commentId: string,
-) {
-  // By wrapping the function call, we can read from environment variables.
-  const baseUrl = getDefaultBaseUrlUsingEnv();
-  return ctx.runAction(component.lib.translate, { commentId, baseUrl });
-}
-
-/**
- * For re-exporting of an API accessible from React clients.
- * e.g. `export const { list, add, translate } =
- * exposeApi(components.convexApiKeys, {
- *   auth: async (ctx, operation) => { ... },
- * });`
- * See example/convex/example.ts.
- */
-export function exposeApi(
-  component: ComponentApi,
-  options: {
-    /**
-     * It's very important to authenticate any functions that users will export.
-     * This function should return the authorized user's ID.
-     */
-    auth: (
-      ctx: { auth: Auth },
-      operation:
-        | { type: "read"; targetId: string }
-        | { type: "create"; targetId: string }
-        | { type: "update"; commentId: string },
-    ) => Promise<string>;
-    baseUrl?: string;
-  },
-) {
-  const baseUrl = options.baseUrl ?? getDefaultBaseUrlUsingEnv();
-  return {
-    list: queryGeneric({
-      args: { targetId: v.string() },
-      handler: async (ctx, args) => {
-        await options.auth(ctx, { type: "read", targetId: args.targetId });
-        return await ctx.runQuery(component.lib.list, {
-          targetId: args.targetId,
-        });
-      },
-    }),
-    add: mutationGeneric({
-      args: { text: v.string(), targetId: v.string() },
-      handler: async (ctx, args) => {
-        const userId = await options.auth(ctx, {
-          type: "create",
-          targetId: args.targetId,
-        });
-        return await ctx.runMutation(component.lib.add, {
-          text: args.text,
-          userId: userId,
-          targetId: args.targetId,
-        });
-      },
-    }),
-    translate: actionGeneric({
-      args: { commentId: v.string() },
-      handler: async (ctx, args) => {
-        await options.auth(ctx, {
-          type: "update",
-          commentId: args.commentId,
-        });
-        return await ctx.runAction(component.lib.translate, {
-          commentId: args.commentId,
-          baseUrl,
-        });
-      },
-    }),
+export interface VerificationResult {
+  valid: boolean;
+  code: string;
+  keyId?: string;
+  ownerId?: string;
+  meta?: any;
+  remaining?: number;
+  ratelimit?: {
+    remaining: number;
+    reset: number;
   };
+  permissions: string[];
+  roles: string[];
+  message?: string;
 }
 
-/**
- * Register HTTP routes for the component.
- * This allows you to expose HTTP endpoints for the component.
- * See example/convex/http.ts for an example.
- */
-export function registerRoutes(
-  http: HttpRouter,
-  component: ComponentApi,
-  { pathPrefix = "/comments" }: { pathPrefix?: string } = {},
-) {
-  http.route({
-    path: `${pathPrefix}/last`,
-    method: "GET",
-    // Note we use httpActionGeneric here because it will be registered in
-    // the app's http.ts file, which has a different type than our `httpAction`.
-    handler: httpActionGeneric(async (ctx, request) => {
-      const targetId = new URL(request.url).searchParams.get("targetId");
-      if (!targetId) {
-        return new Response(
-          JSON.stringify({ error: "targetId parameter required" }),
-          {
-            status: 400,
-            headers: {
-              "Content-Type": "application/json",
-            },
-          },
-        );
-      }
-      const comments = await ctx.runQuery(component.lib.list, {
-        targetId,
-      });
-      const lastComment = comments[0] ?? null;
-      return new Response(JSON.stringify(lastComment), {
-        status: 200,
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-    }),
-  });
+export interface CreateKeyResult {
+  key: string;
+  keyId: string;
 }
 
-function getDefaultBaseUrlUsingEnv() {
-  return process.env.BASE_URL ?? "https://pirate.monkeyness.com";
+export interface UsageStats {
+  total: number;
+  valid: number;
+  rateLimited: number;
+  usageExceeded: number;
+  expired: number;
+  revoked: number;
+  disabled: number;
+  notFound: number;
 }
 
-// Convenient types for `ctx` args, that only include the bare minimum.
+export interface OverallStats {
+  totalKeys: number;
+  activeKeys: number;
+  disabledKeys: number;
+  expiredKeys: number;
+  revokedKeys: number;
+  totalVerifications: number;
+  successRate: number;
+}
 
-// type QueryCtx = Pick<GenericQueryCtx<GenericDataModel>, "runQuery">;
-// type MutationCtx = Pick<
-//   GenericMutationCtx<GenericDataModel>,
-//   "runQuery" | "runMutation"
-// >;
-type ActionCtx = Pick<
-  GenericActionCtx<GenericDataModel>,
-  "runQuery" | "runMutation" | "runAction"
->;
+export function hasPermission(
+  verifyResult: VerificationResult,
+  permission: string
+): boolean {
+  return verifyResult.permissions?.includes(permission) || false;
+}
+
+export function hasAnyPermission(
+  verifyResult: VerificationResult,
+  permissions: string[]
+): boolean {
+  return permissions.some(p => verifyResult.permissions?.includes(p));
+}
+
+export function hasAllPermissions(
+  verifyResult: VerificationResult,
+  permissions: string[]
+): boolean {
+  return permissions.every(p => verifyResult.permissions?.includes(p));
+}
+
+export function hasRole(
+  verifyResult: VerificationResult,
+  role: string
+): boolean {
+  return verifyResult.roles?.includes(role) || false;
+}
+
+export function isRateLimited(verifyResult: VerificationResult): boolean {
+  return verifyResult.code === "RATE_LIMITED";
+}
+
+export function isExpired(verifyResult: VerificationResult): boolean {
+  return verifyResult.code === "EXPIRED";
+}
+
+export function isRevoked(verifyResult: VerificationResult): boolean {
+  return verifyResult.code === "REVOKED";
+}
+
+export function formatKeyHint(key: string): string {
+  if (key.length < 12) return key;
+  const prefix = key.substring(0, key.indexOf("_") + 1);
+  const suffix = key.substring(key.length - 4);
+  return `${prefix}...${suffix}`;
+}
+
+export function calculateExpiration(days: number): number {
+  return Date.now() + days * 24 * 60 * 60 * 1000;
+}
+
+export function isKeyExpiringSoon(
+  expiresAt: number | undefined,
+  daysThreshold: number = 7
+): boolean {
+  if (!expiresAt) return false;
+  const threshold = Date.now() + daysThreshold * 24 * 60 * 60 * 1000;
+  return expiresAt < threshold;
+}
