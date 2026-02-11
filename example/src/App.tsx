@@ -1,120 +1,73 @@
 import { useState } from "react";
-import { useMutation, useQuery } from "convex/react";
-import { api } from "../convex/_generated/api";
+import { KeysPage } from "./pages/KeysPage";
+import { UsageDashboard } from "./pages/UsageDashboard";
+import { PermissionsPage } from "./pages/PermissionsPage";
+import { VerificationLog } from "./pages/VerificationLog";
+import { TryItPage } from "./pages/TryItPage";
 import "./App.css";
 
-/*
-(1.) Example React app demonstrating API keys component usage.
-(2.) Shows key creation, listing, and management in a React UI.
-(3.) Uses Convex React hooks for reactive updates.
+type Page = "keys" | "usage" | "permissions" | "logs" | "tryit";
 
-This example app demonstrates how to build a simple API key management
-dashboard using the component's functions. It shows real-time updates
-as keys are created, updated, or revoked.
-*/
+const NAV_ITEMS: { id: Page; label: string }[] = [
+  { id: "keys", label: "Keys" },
+  { id: "usage", label: "Usage" },
+  { id: "permissions", label: "Permissions" },
+  { id: "logs", label: "Logs" },
+  { id: "tryit", label: "Try It" },
+];
 
 function App() {
-  const [keyName, setKeyName] = useState("");
-  const [createdKey, setCreatedKey] = useState<string | null>(null);
-  
-  const keys = useQuery(api.example.listMyKeys);
-  const createKey = useMutation(api.example.createApiKey);
-  const revokeKey = useMutation(api.example.revokeApiKey);
-  
-  const handleCreateKey = async () => {
-    if (!keyName.trim()) return;
-    
-    const result = await createKey({
-      name: keyName,
-      ratelimit: {
-        limit: 100,
-        duration: 60000, // 100 requests per minute
-      },
-    });
-    
-    setCreatedKey(result.key);
-    setKeyName("");
-  };
-  
-  const handleRevokeKey = async (keyId: string) => {
-    if (confirm("Are you sure you want to revoke this key?")) {
-      await revokeKey({ keyId, soft: true });
+  const [page, setPage] = useState<Page>("keys");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const renderPage = () => {
+    switch (page) {
+      case "keys": return <KeysPage />;
+      case "usage": return <UsageDashboard />;
+      case "permissions": return <PermissionsPage />;
+      case "logs": return <VerificationLog />;
+      case "tryit": return <TryItPage />;
     }
   };
-  
+
   return (
-    <div className="app">
-      <h1>API Key Management</h1>
-      
-      {createdKey && (
-        <div className="alert">
-          <h3>⚠️ Save this key - it won't be shown again!</h3>
-          <code>{createdKey}</code>
-          <button onClick={() => setCreatedKey(null)}>Dismiss</button>
+    <div className="layout">
+      <div className="main-content">
+        <div className="top-bar">
+          <h1>Convex API Keys</h1>
+          <button
+            className="menu-toggle"
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+          >
+            ☰
+          </button>
         </div>
-      )}
-      
-      <div className="create-key">
-        <h2>Create New Key</h2>
-        <input
-          type="text"
-          placeholder="Key name"
-          value={keyName}
-          onChange={(e) => setKeyName(e.target.value)}
-        />
-        <button onClick={handleCreateKey}>Create Key</button>
+        {renderPage()}
       </div>
-      
-      <div className="keys-list">
-        <h2>Your API Keys</h2>
-        {keys === undefined ? (
-          <p>Loading...</p>
-        ) : keys.length === 0 ? (
-          <p>No keys yet. Create one above!</p>
-        ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Hint</th>
-                <th>Created</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {keys.map((key) => (
-                <tr key={key.keyId}>
-                  <td>{key.name}</td>
-                  <td><code>{key.hint}</code></td>
-                  <td>{new Date(key.createdAt).toLocaleDateString()}</td>
-                  <td>
-                    {key.revokedAt ? (
-                      <span className="status revoked">Revoked</span>
-                    ) : !key.enabled ? (
-                      <span className="status disabled">Disabled</span>
-                    ) : key.expires && key.expires < Date.now() ? (
-                      <span className="status expired">Expired</span>
-                    ) : (
-                      <span className="status active">Active</span>
-                    )}
-                  </td>
-                  <td>
-                    {!key.revokedAt && (
-                      <button
-                        onClick={() => handleRevokeKey(key.keyId)}
-                        className="revoke-btn"
-                      >
-                        Revoke
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+
+      <nav className={`sidebar ${sidebarOpen ? "sidebar-open" : ""}`}>
+        <div className="sidebar-header">
+          <span>Navigation</span>
+          <button className="sidebar-close" onClick={() => setSidebarOpen(false)}>✕</button>
+        </div>
+        <ul className="nav-list">
+          {NAV_ITEMS.map(item => (
+            <li key={item.id}>
+              <button
+                className={`nav-btn ${page === item.id ? "nav-active" : ""}`}
+                onClick={() => { setPage(item.id); setSidebarOpen(false); }}
+              >
+                {item.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+        <div className="sidebar-footer">
+          <code>@00akshatsinha00/convex-api-keys</code>
+        </div>
+      </nav>
+
+      {sidebarOpen && <div className="overlay" onClick={() => setSidebarOpen(false)} />}
     </div>
   );
 }
