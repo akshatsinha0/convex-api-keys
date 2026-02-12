@@ -251,8 +251,8 @@ describe("component lib", () => {
 
     const rotated = await t.mutation(api.lib.rotate, { keyId: result.keyId });
     const verifyResult = await t.mutation(api.lib.verify, { key: rotated.key });
-    expect(verifyResult.permissions).toContain(permId);
-    expect(verifyResult.roles).toContain(roleId);
+    expect(verifyResult.permissions).toContain("api:read");
+    expect(verifyResult.roles).toContain("api-reader");
   });
 
   // ── Usage Credits ──────────────────────────────────────────────────
@@ -490,10 +490,10 @@ describe("component lib", () => {
 
     const verifyResult = await t.mutation(api.lib.verify, { key: result.key });
     expect(verifyResult.valid).toBe(true);
-    // Role's permissions should be resolved
-    expect(verifyResult.permissions).toContain(readPerm);
-    expect(verifyResult.permissions).toContain(writePerm);
-    expect(verifyResult.roles).toContain(roleId);
+    // Role's permissions should be resolved to names
+    expect(verifyResult.permissions).toContain("data:read");
+    expect(verifyResult.permissions).toContain("data:write");
+    expect(verifyResult.roles).toContain("editor");
   });
 
   test("direct permissions merged with role permissions", async () => {
@@ -516,9 +516,9 @@ describe("component lib", () => {
     });
 
     const verifyResult = await t.mutation(api.lib.verify, { key: result.key });
-    expect(verifyResult.permissions).toContain(p1);
-    expect(verifyResult.permissions).toContain(p2);
-    expect(verifyResult.permissions).toContain(p3);
+    expect(verifyResult.permissions).toContain("perm:a");
+    expect(verifyResult.permissions).toContain("perm:b");
+    expect(verifyResult.permissions).toContain("perm:c");
     expect(verifyResult.permissions.length).toBe(3);
   });
 
@@ -618,10 +618,10 @@ describe("component lib", () => {
     await t.mutation(api.lib.create, { ownerId: "u1", name: "K3", namespace: "staging" });
 
     const prodKeys = await t.query(api.lib.listKeys, { namespace: "prod" });
-    expect(prodKeys.length).toBe(2);
+    expect(prodKeys.keys.length).toBe(2);
 
     const stagingKeys = await t.query(api.lib.listKeys, { namespace: "staging" });
-    expect(stagingKeys.length).toBe(1);
+    expect(stagingKeys.keys.length).toBe(1);
   });
 
   test("listKeys by owner", async () => {
@@ -631,7 +631,7 @@ describe("component lib", () => {
     await t.mutation(api.lib.create, { ownerId: "bob", name: "B1" });
 
     const aliceKeys = await t.query(api.lib.listKeys, { ownerId: "alice" });
-    expect(aliceKeys.length).toBe(2);
+    expect(aliceKeys.keys.length).toBe(2);
   });
 
   test("listKeys with limit", async () => {
@@ -641,7 +641,7 @@ describe("component lib", () => {
     }
 
     const limited = await t.query(api.lib.listKeys, { limit: 3 });
-    expect(limited.length).toBe(3);
+    expect(limited.keys.length).toBe(3);
   });
 
   test("getKey returns null for nonexistent", async () => {
@@ -712,7 +712,7 @@ describe("component lib", () => {
     });
     // Disable the second key
     const disabled = await t.query(api.lib.listKeys, { namespace: "metrics-ns" });
-    const disableTarget = disabled.find((k) => k.name === "Disabled");
+    const disableTarget = disabled.keys.find((k: { name: string }) => k.name === "Disabled");
     await t.mutation(api.lib.update, { keyId: disableTarget!.keyId, enabled: false });
 
     // Verify the active key to generate stats
@@ -809,8 +809,8 @@ describe("component lib", () => {
     expect(count).toBe(1);
 
     const remaining = await t.query(api.lib.listKeys, { namespace: "purge-ns" });
-    expect(remaining.length).toBe(1);
-    expect(remaining[0].name).toBe("Active Key");
+    expect(remaining.keys.length).toBe(1);
+    expect(remaining.keys[0].name).toBe("Active Key");
   });
 
   test("purgeVerificationLogs removes old logs", async () => {
@@ -868,10 +868,10 @@ describe("component lib", () => {
     const prod = await t.query(api.lib.listKeys, { namespace: "production" });
     const dev = await t.query(api.lib.listKeys, { namespace: "development" });
 
-    expect(prod.length).toBe(1);
-    expect(prod[0].name).toBe("Prod Key");
-    expect(dev.length).toBe(1);
-    expect(dev[0].name).toBe("Dev Key");
+    expect(prod.keys.length).toBe(1);
+    expect(prod.keys[0].name).toBe("Prod Key");
+    expect(dev.keys.length).toBe(1);
+    expect(dev.keys[0].name).toBe("Dev Key");
   });
 
   test("different owners cannot see each other's keys via getKeysByOwner", async () => {

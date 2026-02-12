@@ -30,6 +30,7 @@ export const create = mutation({
     permissions: v.optional(v.array(v.string())),
     environment: v.optional(v.string()),
     namespace: v.optional(v.string()),
+    keyBytes: v.optional(v.number()),
   },
   returns: v.object({ key: v.string(), keyId: v.string() }),
   handler: async (ctx, args): Promise<CreateKeyResult> => {
@@ -37,7 +38,7 @@ export const create = mutation({
     const namespace = args.namespace || "default";
     const now = Date.now();
 
-    const plaintext = generateKey(prefix, 32);
+    const plaintext = generateKey(prefix, args.keyBytes || 32);
     const hash = await hashKey(plaintext);
     const hint = generateHint(plaintext);
 

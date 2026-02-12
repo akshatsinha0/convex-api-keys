@@ -11,7 +11,7 @@ ctx.runQuery, merging in default configuration values.
 */
 
 import type { ComponentApi } from "../component/_generated/component.js";
-import type { RunMutationCtx, RunQueryCtx, ApiKeysConfig } from "./types.js";
+import type { RunMutationCtx, RunQueryCtx, ApiKeysConfig, VerificationResult } from "./types.js";
 
 export class ApiKeys {
   public component: ComponentApi;
@@ -40,12 +40,14 @@ export class ApiKeys {
       permissions?: string[];
       environment?: string;
       namespace?: string;
+      keyBytes?: number;
     }
   ) {
     return await ctx.runMutation(this.component.lib.create, {
       ...args,
       prefix: args.prefix || this.config.defaultPrefix,
       namespace: args.namespace || this.config.defaultNamespace,
+      keyBytes: args.keyBytes || this.config.keyBytes,
     });
   }
 
@@ -95,12 +97,13 @@ export class ApiKeys {
 
   async listKeys(
     ctx: RunQueryCtx,
-    args?: { namespace?: string; ownerId?: string; limit?: number }
+    args?: { namespace?: string; ownerId?: string; limit?: number; cursor?: string }
   ) {
     return await ctx.runQuery(this.component.lib.listKeys, {
       namespace: args?.namespace || this.config.defaultNamespace,
       ownerId: args?.ownerId,
       limit: args?.limit,
+      cursor: args?.cursor,
     });
   }
 
@@ -126,13 +129,27 @@ export class ApiKeys {
     return await ctx.runQuery(this.component.lib.getUsageByOwner, args);
   }
 
+  async getTopKeysByUsage(
+    ctx: RunQueryCtx,
+    args: { namespace: string; limit?: number }
+  ) {
+    return await ctx.runQuery(this.component.lib.getTopKeysByUsage, args);
+  }
+
+  async getVerificationsOverTime(
+    ctx: RunQueryCtx,
+    args: { keyId?: string; namespace?: string; period?: string; since?: number }
+  ) {
+    return await ctx.runQuery(this.component.lib.getVerificationsOverTime, args);
+  }
+
   async getOverallStats(ctx: RunQueryCtx, args: { namespace: string }) {
     return await ctx.runQuery(this.component.lib.getOverallStats, args);
   }
 
   async getAuditLog(
     ctx: RunQueryCtx,
-    args?: { keyId?: string; actorId?: string; limit?: number }
+    args?: { keyId?: string; actorId?: string; actionType?: string; limit?: number; since?: number }
   ) {
     return await ctx.runQuery(this.component.lib.getAuditLog, args || {});
   }
@@ -209,6 +226,20 @@ export class ApiKeys {
     return await ctx.runMutation(this.component.lib.deleteRateLimitOverride, args);
   }
 
+  async setOwnerRateLimit(
+    ctx: RunMutationCtx,
+    args: { ownerId: string; namespace: string; limit: number; duration: number }
+  ) {
+    return await ctx.runMutation(this.component.lib.setOwnerRateLimit, args);
+  }
+
+  async deleteOwnerRateLimit(
+    ctx: RunMutationCtx,
+    args: { ownerId: string; namespace: string }
+  ) {
+    return await ctx.runMutation(this.component.lib.deleteOwnerRateLimit, args);
+  }
+
   async getRateLimitOverrides(
     ctx: RunQueryCtx,
     args: { namespace: string }
@@ -225,9 +256,28 @@ export class ApiKeys {
 
   async purgeVerificationLogs(
     ctx: RunMutationCtx,
-    args: { olderThan: number }
+    args?: { olderThan?: number }
   ) {
-    return await ctx.runMutation(this.component.lib.purgeVerificationLogs, args);
+    const retentionMs = (this.config.logRetentionDays || 90) * 24 * 60 * 60 * 1000;
+    return await ctx.runMutation(this.component.lib.purgeVerificationLogs, {
+      olderThan: args?.olderThan || (Date.now() - retentionMs),
+    });
+  }
+
+  static hasPermission(result: VerificationResult, permission: string): boolean {
+    return result.permissions?.includes(permission) || false;
+  }
+
+  static hasAnyPermission(result: VerificationResult, permissions: string[]): boolean {
+    return permissions.some((p) => result.permissions?.includes(p));
+  }
+
+  static hasAllPermissions(result: VerificationResult, permissions: string[]): boolean {
+    return permissions.every((p) => result.permissions?.includes(p));
+  }
+
+  static hasRole(result: VerificationResult, role: string): boolean {
+    return result.roles?.includes(role) || false;
   }
 }
 

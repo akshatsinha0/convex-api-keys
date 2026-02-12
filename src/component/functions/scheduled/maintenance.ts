@@ -17,14 +17,8 @@ export const expireKeys = internalMutation({
 
     const expiredKeys = await ctx.db
       .query("keys")
-      .withIndex("by_expires")
-      .filter((q) =>
-        q.and(
-          q.neq(q.field("expires"), undefined),
-          q.lt(q.field("expires"), now),
-          q.eq(q.field("enabled"), true)
-        )
-      )
+      .withIndex("by_expires", (q) => q.gt("expires", 0).lt("expires", now))
+      .filter((q) => q.eq(q.field("enabled"), true))
       .take(100);
 
     for (const key of expiredKeys) {

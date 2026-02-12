@@ -104,6 +104,61 @@ export const deleteRateLimitOverride = mutation({
   },
 });
 
+export const setOwnerRateLimit = mutation({
+  args: {
+    ownerId: v.string(),
+    namespace: v.string(),
+    limit: v.number(),
+    duration: v.number(),
+  },
+  handler: async (ctx, args) => {
+    assertPositive(args.limit, "limit");
+    assertPositive(args.duration, "duration");
+
+    const existing = await ctx.db
+      .query("rateLimitOverrides")
+      .withIndex("by_key_namespace", (q) =>
+        q.eq("keyOrOwnerId", args.ownerId).eq("namespace", args.namespace)
+      )
+      .first();
+
+    if (existing) {
+      await ctx.db.patch(existing._id, { limit: args.limit, duration: args.duration });
+    } else {
+      await ctx.db.insert("rateLimitOverrides", {
+        keyOrOwnerId: args.ownerId,
+        namespace: args.namespace,
+        limit: args.limit,
+        duration: args.duration,
+      });
+    }
+
+    await logAudit(ctx, "ratelimit.owner_set", {
+      ownerId: args.ownerId, limit: args.limit, duration: args.duration,
+    });
+  },
+});
+
+export const deleteOwnerRateLimit = mutation({
+  args: {
+    ownerId: v.string(),
+    namespace: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const override = await ctx.db
+      .query("rateLimitOverrides")
+      .withIndex("by_key_namespace", (q) =>
+        q.eq("keyOrOwnerId", args.ownerId).eq("namespace", args.namespace)
+      )
+      .first();
+
+    if (override) {
+      await ctx.db.delete(override._id);
+      await logAudit(ctx, "ratelimit.owner_deleted", { ownerId: args.ownerId });
+    }
+  },
+});
+
 export const getRateLimitOverrides = query({
   args: { namespace: v.string() },
   returns: v.array(

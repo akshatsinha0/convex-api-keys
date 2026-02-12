@@ -4,9 +4,11 @@ import { query } from "../../_generated/server.js";
 /*
 (1.) Namespace-level overview statistics computing key counts and success rates.
 (2.) Categorizes keys into active, disabled, expired, and revoked buckets.
+(3.) Uses analyticsRollups for verification totals to avoid O(N*M) table scans.
 
 This query provides a high-level health dashboard for an entire namespace, counting
-key states and calculating verification success rates across all keys in the namespace.
+key states and calculating verification success rates. Verification totals are read
+from pre-aggregated analyticsRollups to stay within Convex transaction limits.
 */
 
 export const getOverallStats = query({
@@ -42,14 +44,28 @@ export const getOverallStats = query({
     let totalVerifications = 0;
     let successfulVerifications = 0;
 
-    for (const key of keys) {
-      const logs = await ctx.db
-        .query("verificationLogs")
-        .withIndex("by_key_time", (q) => q.eq("keyHash", key.hash))
-        .collect();
+    const rollups = await ctx.db
+      .query("analyticsRollups")
+      .withIndex("by_ns_period", (q) =>
+        q.eq("namespace", args.namespace).eq("period", "hour")
+      )
+      .collect();
 
-      totalVerifications += logs.length;
-      successfulVerifications += logs.filter((l) => l.success).length;
+    for (const r of rollups) {
+      totalVerifications += r.total;
+      successfulVerifications += r.valid;
+    }
+
+    if (totalVerifications === 0) {
+      for (const key of keys) {
+        const logs = await ctx.db
+          .query("verificationLogs")
+          .withIndex("by_key_time", (q) => q.eq("keyHash", key.hash))
+          .take(500);
+
+        totalVerifications += logs.length;
+        successfulVerifications += logs.filter((l) => l.success).length;
+      }
     }
 
     const successRate =

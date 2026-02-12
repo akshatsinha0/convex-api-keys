@@ -40,6 +40,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
           permissions?: string[];
           environment?: string;
           namespace?: string;
+          keyBytes?: number;
         },
         { key: string; keyId: string },
         Name
@@ -166,25 +167,29 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
       listKeys: FunctionReference<
         "query",
         "internal",
-        { namespace?: string; ownerId?: string; limit?: number },
-        Array<{
-          keyId: string;
-          hint: string;
-          namespace: string;
-          ownerId: string;
-          name: string;
-          meta?: any;
-          createdAt: number;
-          updatedAt: number;
-          expires?: number;
-          remaining?: number;
-          enabled: boolean;
-          revokedAt?: number;
-          environment?: string;
-          permissions: string[];
-          roles: string[];
-          unkeyKeyId?: string;
-        }>,
+        { namespace?: string; ownerId?: string; limit?: number; cursor?: string },
+        {
+          keys: Array<{
+            keyId: string;
+            hint: string;
+            namespace: string;
+            ownerId: string;
+            name: string;
+            meta?: any;
+            createdAt: number;
+            updatedAt: number;
+            expires?: number;
+            remaining?: number;
+            enabled: boolean;
+            revokedAt?: number;
+            environment?: string;
+            permissions: string[];
+            roles: string[];
+            unkeyKeyId?: string;
+          }>;
+          cursor?: string;
+          hasMore: boolean;
+        },
         Name
       >;
       getKey: FunctionReference<
@@ -267,6 +272,32 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         },
         Name
       >;
+      getTopKeysByUsage: FunctionReference<
+        "query",
+        "internal",
+        { namespace: string; limit?: number },
+        Array<{
+          keyHash: string;
+          keyId?: string;
+          name?: string;
+          ownerId?: string;
+          total: number;
+          valid: number;
+        }>,
+        Name
+      >;
+      getVerificationsOverTime: FunctionReference<
+        "query",
+        "internal",
+        { keyId?: string; namespace?: string; period?: string; since?: number },
+        Array<{
+          timestamp: number;
+          total: number;
+          valid: number;
+          failed: number;
+        }>,
+        Name
+      >;
       getOverallStats: FunctionReference<
         "query",
         "internal",
@@ -285,7 +316,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
       getAuditLog: FunctionReference<
         "query",
         "internal",
-        { keyId?: string; actorId?: string; limit?: number },
+        { keyId?: string; actorId?: string; actionType?: string; limit?: number; since?: number },
         Array<{
           action: string;
           actorId?: string;
@@ -337,6 +368,20 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         any,
         Name
       >;
+      setOwnerRateLimit: FunctionReference<
+        "mutation",
+        "internal",
+        { ownerId: string; namespace: string; limit: number; duration: number },
+        any,
+        Name
+      >;
+      deleteOwnerRateLimit: FunctionReference<
+        "mutation",
+        "internal",
+        { ownerId: string; namespace: string },
+        any,
+        Name
+      >;
       getRateLimitOverrides: FunctionReference<
         "query",
         "internal",
@@ -378,6 +423,13 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         Name
       >;
       cleanupLogs: FunctionReference<
+        "mutation",
+        "internal",
+        Record<string, never>,
+        any,
+        Name
+      >;
+      rollupDaily: FunctionReference<
         "mutation",
         "internal",
         Record<string, never>,

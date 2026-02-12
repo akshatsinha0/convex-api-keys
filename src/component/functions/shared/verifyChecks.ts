@@ -1,5 +1,5 @@
 import type { MutationCtx } from "../../_generated/server.js";
-import type { Doc } from "../../_generated/dataModel.js";
+import type { Doc, Id } from "../../_generated/dataModel.js";
 import type { OutcomeCode } from "../../types/keys.js";
 
 /*
@@ -72,23 +72,29 @@ export async function resolvePermissions(
   ctx: MutationCtx,
   permissionIds: string[],
   roleIds: string[]
-): Promise<string[]> {
-  const permissions = new Set<string>(permissionIds);
+): Promise<{ permissionNames: string[]; roleNames: string[] }> {
+  const allPermissionIds = new Set<string>(permissionIds);
+  const roleNames: string[] = [];
 
   for (const roleId of roleIds) {
-    const role = await ctx.db
-      .query("roles")
-      .filter((q) => q.eq(q.field("_id"), roleId))
-      .first();
-
+    const role = await ctx.db.get(roleId as Id<"roles">);
     if (role) {
+      roleNames.push(role.name);
       for (const p of role.permissionIds) {
-        permissions.add(p);
+        allPermissionIds.add(p);
       }
     }
   }
 
-  return Array.from(permissions);
+  const permissionNames: string[] = [];
+  for (const permId of allPermissionIds) {
+    const perm = await ctx.db.get(permId as Id<"permissions">);
+    if (perm) {
+      permissionNames.push(perm.name);
+    }
+  }
+
+  return { permissionNames, roleNames };
 }
 
 export async function logVerification(

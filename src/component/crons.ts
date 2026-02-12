@@ -31,6 +31,12 @@ crons.interval(
 );
 
 crons.interval(
+  "rollup daily",
+  { hours: 24 },
+  internal.lib.rollupDaily,
+);
+
+crons.interval(
   "cleanup logs",
   { hours: 24 },
   internal.lib.cleanupLogs,

@@ -4,8 +4,8 @@ import type { Id } from "../_generated/dataModel.js";
 import { mapKeyToInfo } from "./shared/mapKeyToInfo.js";
 
 /*
-(1.) Query functions for retrieving key information with filtering and pagination.
-(2.) listKeys supports filtering by owner or namespace; getKey returns a single key; getKeysByOwner lists all.
+(1.) Query functions for retrieving key information with cursor-based pagination.
+(2.) listKeys supports filtering by owner or namespace with cursor for paginated results.
 (3.) All queries use shared mapKeyToInfo to eliminate the 15-field mapping duplication.
 
 This module implements read-only query functions for accessing key data. All queries are
@@ -37,26 +37,39 @@ export const listKeys = query({
     namespace: v.optional(v.string()),
     ownerId: v.optional(v.string()),
     limit: v.optional(v.number()),
+    cursor: v.optional(v.string()),
   },
-  returns: v.array(keyInfoValidator),
+  returns: v.object({
+    keys: v.array(keyInfoValidator),
+    cursor: v.optional(v.string()),
+    hasMore: v.boolean(),
+  }),
   handler: async (ctx, args) => {
-    let keys;
+    const numItems = args.limit || 100;
 
+    let queryBuilder;
     if (args.ownerId) {
-      keys = await ctx.db
+      queryBuilder = ctx.db
         .query("keys")
-        .withIndex("by_owner", (q) => q.eq("ownerId", args.ownerId!))
-        .take(args.limit || 100);
+        .withIndex("by_owner", (q) => q.eq("ownerId", args.ownerId!));
     } else if (args.namespace) {
-      keys = await ctx.db
+      queryBuilder = ctx.db
         .query("keys")
-        .withIndex("by_namespace", (q) => q.eq("namespace", args.namespace!))
-        .take(args.limit || 100);
+        .withIndex("by_namespace", (q) => q.eq("namespace", args.namespace!));
     } else {
-      keys = await ctx.db.query("keys").take(args.limit || 100);
+      queryBuilder = ctx.db.query("keys");
     }
 
-    return keys.map(mapKeyToInfo);
+    const result = await queryBuilder.paginate({
+      numItems,
+      cursor: args.cursor ?? null,
+    });
+
+    return {
+      keys: result.page.map(mapKeyToInfo),
+      cursor: result.isDone ? undefined : result.continueCursor,
+      hasMore: !result.isDone,
+    };
   },
 });
 

@@ -15,7 +15,9 @@ export const getAuditLog = query({
   args: {
     keyId: v.optional(v.string()),
     actorId: v.optional(v.string()),
+    actionType: v.optional(v.string()),
     limit: v.optional(v.number()),
+    since: v.optional(v.number()),
   },
   returns: v.array(
     v.object({
@@ -35,24 +37,39 @@ export const getAuditLog = query({
       if (!keyDoc) return [];
       logs = await ctx.db
         .query("auditLog")
-        .withIndex("by_key", (q) => q.eq("targetKeyHash", keyDoc.hash))
+        .withIndex("by_key", (q) => {
+          const indexed = q.eq("targetKeyHash", keyDoc.hash);
+          if (args.since !== undefined) return indexed.gte("timestamp", args.since);
+          return indexed;
+        })
         .order("desc")
         .take(take);
     } else if (args.actorId) {
       logs = await ctx.db
         .query("auditLog")
-        .withIndex("by_actor", (q) => q.eq("actorId", args.actorId!))
+        .withIndex("by_actor", (q) => {
+          const indexed = q.eq("actorId", args.actorId!);
+          if (args.since !== undefined) return indexed.gte("timestamp", args.since);
+          return indexed;
+        })
         .order("desc")
         .take(take);
     } else {
       logs = await ctx.db
         .query("auditLog")
-        .withIndex("by_time")
+        .withIndex("by_time", (q) => {
+          if (args.since !== undefined) return q.gte("timestamp", args.since);
+          return q;
+        })
         .order("desc")
         .take(take);
     }
 
-    return logs.map((l) => ({
+    const filtered = args.actionType
+      ? logs.filter((l) => l.action === args.actionType)
+      : logs;
+
+    return filtered.map((l) => ({
       action: l.action,
       actorId: l.actorId,
       targetKeyHash: l.targetKeyHash,

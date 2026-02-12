@@ -28,6 +28,8 @@ export { listKeys, getKey, getKeysByOwner } from "./functions/queries.js";
 export {
   getUsageStats,
   getUsageByOwner,
+  getTopKeysByUsage,
+  getVerificationsOverTime,
 } from "./functions/analytics/usage.js";
 export { getOverallStats } from "./functions/analytics/overview.js";
 export {
@@ -38,8 +40,10 @@ export {
   checkRateLimit,
   setRateLimitOverride,
   deleteRateLimitOverride,
+  setOwnerRateLimit,
+  deleteOwnerRateLimit,
   getRateLimitOverrides,
 } from "./functions/ratelimit.js";
 export { purgeExpiredKeys, purgeVerificationLogs } from "./functions/admin.js";
 export { expireKeys, cleanupLogs } from "./functions/scheduled/maintenance.js";
-export { rollupAnalytics } from "./functions/scheduled/rollup.js";
+export { rollupAnalytics, rollupDaily } from "./functions/scheduled/rollup.js";

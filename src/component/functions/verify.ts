@@ -100,20 +100,44 @@ export const verify = mutation({
       }
     }
 
+    const ownerRateLimit = await ctx.db
+      .query("rateLimitOverrides")
+      .withIndex("by_key_namespace", (q) =>
+        q.eq("keyOrOwnerId", keyRecord.ownerId).eq("namespace", keyRecord.namespace)
+      )
+      .first();
+
+    if (ownerRateLimit) {
+      const ownerRl = await checkAndUpdateRateLimit(
+        ctx, keyRecord.ownerId, keyRecord.namespace,
+        ownerRateLimit.limit, ownerRateLimit.duration, now
+      );
+
+      if (!ownerRl.success) {
+        await logVerification(ctx, hash, false, "RATE_LIMITED", args, ownerRl.remaining);
+        return {
+          valid: false, code: "RATE_LIMITED",
+          keyId: keyRecord._id.toString(), ownerId: keyRecord.ownerId,
+          ratelimit: { remaining: ownerRl.remaining, reset: ownerRl.reset },
+          permissions: [], roles: [], message: "Owner rate limit exceeded",
+        };
+      }
+    }
+
     let newRemaining = keyRecord.remaining;
     if (keyRecord.remaining !== undefined) {
       newRemaining = keyRecord.remaining - 1;
       await ctx.db.patch(keyRecord._id, { remaining: newRemaining, updatedAt: now });
     }
 
-    const permissions = await resolvePermissions(ctx, keyRecord.permissionIds, keyRecord.roleIds);
+    const { permissionNames, roleNames } = await resolvePermissions(ctx, keyRecord.permissionIds, keyRecord.roleIds);
     await logVerification(ctx, hash, true, "VALID", args, undefined, newRemaining);
 
     return {
       valid: true, code: "VALID",
       keyId: keyRecord._id.toString(), ownerId: keyRecord.ownerId,
       meta: keyRecord.meta, remaining: newRemaining,
-      permissions, roles: keyRecord.roleIds, message: "API key is valid",
+      permissions: permissionNames, roles: roleNames, message: "API key is valid",
     };
   },
 });
