@@ -107,11 +107,5 @@
     "vitest": "4.0.18"
   },
   "types": "./dist/client/index.d.ts",
-  "module": "./dist/client/index.js",
-  "dependencies": {
-    "@rollup/rollup-linux-x64-gnu": "^4.57.1"
-  },
-  "optionalDependencies": {
-    "@rollup/rollup-win32-x64-msvc": "^4.57.1"
-  }
+  "module": "./dist/client/index.js"
 }
